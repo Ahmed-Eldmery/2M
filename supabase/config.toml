@@ -1,0 +1,4 @@
+project_id = "hdikzgqhguiznyyuoovi"
+
+[functions.setup-owner]
+verify_jwt = false

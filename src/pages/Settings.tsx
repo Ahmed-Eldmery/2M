@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Building2, Users, Shield, Bell, Palette, Database, Plus, X, Loader2 } from 'lucide-react';
+import { Building2, Users, Shield, Bell, Palette, Database, Plus, X, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
 import { useUserRoles, AppRole } from '@/hooks/useUserRoles';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const roleLabels: Record<AppRole, string> = {
   owner: 'مالك',
@@ -22,6 +24,8 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState('company');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AppRole | ''>('');
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   const { users, loading, addRole, removeRole } = useUserRoles();
 
@@ -32,6 +36,7 @@ const Settings = () => {
     { id: 'notifications', label: 'الإشعارات', icon: Bell },
     { id: 'appearance', label: 'المظهر', icon: Palette },
     { id: 'backup', label: 'النسخ الاحتياطي', icon: Database },
+    { id: 'reset', label: 'تهيئة النظام', icon: AlertTriangle },
   ];
 
   const handleAddRole = async () => {
@@ -39,6 +44,57 @@ const Settings = () => {
     await addRole(selectedUser, selectedRole);
     setSelectedUser(null);
     setSelectedRole('');
+  };
+
+  const handleResetSystem = async () => {
+    if (resetConfirmation !== 'RESET') return;
+    
+    setIsResetting(true);
+    try {
+      const tablesToDelete = [
+        'activity_logs',
+        'notifications',
+        'order_inventory_items',
+        'order_items',
+        'transactions',
+        'salary_records',
+        'tasks',
+        'inventory_receipt_items',
+        'inventory_receipts',
+        'print_orders',
+        'inventory',
+        'supplier_items',
+        'suppliers',
+        'customers',
+        'employees'
+      ];
+
+      for (const table of tablesToDelete) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .not('id', 'is', null);
+        
+        if (error) {
+          console.error(`Error deleting from ${table}:`, error);
+          throw new Error(`تعذر مسح البيانات من جدول ${table}`);
+        }
+      }
+
+      toast.success('تمت إعادة تهيئة النظام بنجاح. جميع البيانات محذوفة الآن.');
+      setResetConfirmation('');
+      
+      // Reload the page to clear caches/state
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('Reset system error:', error);
+      toast.error('حدث خطأ أثناء محاولة مسح البيانات: ' + error.message);
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -226,7 +282,53 @@ const Settings = () => {
             </div>
           )}
 
-          {activeTab !== 'company' && activeTab !== 'users' && activeTab !== 'permissions' && (
+          {activeTab === 'reset' && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-3 text-destructive mb-6">
+                <AlertTriangle className="w-8 h-8" />
+                <h2 className="text-xl font-bold">إعادة تهيئة النظام بالكامل</h2>
+              </div>
+              
+              <div className="p-6 bg-destructive/10 border border-destructive/20 rounded-lg space-y-4">
+                <p className="text-destructive font-semibold text-lg">تحذير خطير جداً!</p>
+                <p className="text-foreground">
+                  أنت على وشك مسح <span className="font-bold">جميع البيانات</span> في النظام. سيتم حذف جميع العملاء، الطلبات، الإيصالات، الحسابات، والمخزون بشكل نهائي ولا يمكن التراجع عن هذه الخطوة.
+                </p>
+                <p className="text-muted-foreground text-sm">
+                  ملاحظة: سيتم الاحتفاظ بحسابات المستخدمين وصلاحياتهم فقط للتمكن من تسجيل الدخول لاحقاً.
+                </p>
+
+                <div className="pt-4 border-t border-destructive/20">
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    لتأكيد المسح، يرجى كتابة كلمة <span className="font-mono bg-muted px-2 py-1 rounded mx-1">RESET</span> بالإنجليزية في الحقل أدناه:
+                  </label>
+                  <input 
+                    type="text" 
+                    value={resetConfirmation}
+                    onChange={(e) => setResetConfirmation(e.target.value)}
+                    placeholder="اكتب كلمة RESET لتأكيد المسح"
+                    className="input-field border-destructive focus:border-destructive mb-4" 
+                    dir="ltr"
+                  />
+                  
+                  <button 
+                    onClick={handleResetSystem}
+                    disabled={resetConfirmation !== 'RESET' || isResetting}
+                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-destructive hover:bg-destructive/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-destructive disabled:opacity-50 disabled:cursor-not-allowed items-center gap-2"
+                  >
+                    {isResetting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-5 h-5" />
+                    )}
+                    {isResetting ? 'جاري مسح النظام...' : 'تأكيد المسح النهائي'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab !== 'company' && activeTab !== 'users' && activeTab !== 'permissions' && activeTab !== 'reset' && (
             <div className="text-center py-12">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
                 {tabs.find(t => t.id === activeTab)?.icon && (

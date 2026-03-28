@@ -144,13 +144,15 @@ const Dashboard = () => {
         مؤشرات التشغيل الحية
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="مبيعات اليوم"
-          value={formatCurrency(todaySales)}
-          subtitle={`${todayOrders} طلب جديد اليوم`}
-          icon={TrendingUp}
-          variant="primary"
-        />
+        {canViewFinancials && (
+          <StatCard
+            title="مبيعات اليوم"
+            value={formatCurrency(todaySales)}
+            subtitle={`${todayOrders} طلب جديد اليوم`}
+            icon={TrendingUp}
+            variant="primary"
+          />
+        )}
         <StatCard
           title="قيد التنفيذ (تصميم/طباعة)"
           value={pendingOrders}

@@ -34,7 +34,7 @@ const Sidebar = () => {
     { path: '/calendar', label: 'التقويم', icon: CalendarDays, show: true },
     { path: '/tasks', label: 'المهام', icon: ListTodo, show: isOwnerOrAccountant() },
     { path: '/accounting', label: 'الحسابات', icon: DollarSign, show: isOwnerOrAccountant() },
-    { path: '/reports', label: 'التقارير', icon: BarChart3, show: isOwnerOrAccountant() },
+    { path: '/reports', label: 'التقارير', icon: BarChart3, show: isOwner() },
     { path: '/employees', label: 'الموظفين', icon: UserCog, show: isOwnerOrAccountant() },
     { path: '/attendance', label: 'الحضور والانصراف', icon: Clock, show: isOwnerOrAccountant() },
     { path: '/suppliers', label: 'الموردين', icon: Truck, show: isOwner() },

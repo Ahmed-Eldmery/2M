@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Eye, Loader2 } from 'lucide-react';
 import { useOrders } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/data/mockData';
 
 const getStatusLabel = (status: string) => {
@@ -29,7 +30,9 @@ const getStatusClass = (status: string) => {
 
 const RecentOrders = () => {
   const { orders, loading } = useOrders();
+  const { isOwnerOrAccountant } = useAuth();
   const recentOrders = orders.slice(0, 5);
+  const canViewFinancials = isOwnerOrAccountant();
 
   if (loading) {
     return (
@@ -74,12 +77,14 @@ const RecentOrders = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="text-left">
-                  <p className="font-bold text-foreground">{formatCurrency(order.price)}</p>
-                  {order.remaining > 0 && (
-                    <p className="text-sm text-destructive">متبقي: {formatCurrency(order.remaining)}</p>
-                  )}
-                </div>
+                {canViewFinancials && (
+                  <div className="text-left">
+                    <p className="font-bold text-foreground">{formatCurrency(order.price)}</p>
+                    {order.remaining > 0 && (
+                      <p className="text-sm text-destructive">متبقي: {formatCurrency(order.remaining)}</p>
+                    )}
+                  </div>
+                )}
                 <span className={`status-badge ${getStatusClass(order.status)}`}>
                   {getStatusLabel(order.status)}
                 </span>

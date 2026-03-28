@@ -71,7 +71,7 @@ const Settings = () => {
 
       for (const table of tablesToDelete) {
         const { error } = await supabase
-          .from(table)
+          .from(table as any)
           .delete()
           .not('id', 'is', null);
         

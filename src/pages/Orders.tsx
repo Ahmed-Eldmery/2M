@@ -39,7 +39,8 @@ const Orders = () => {
   const { customers, addCustomer } = useCustomers();
   const { items: inventoryItems } = useInventory();
   const { addOrderInventoryItems } = useOrderInventory();
-  const { hasRole, isOwner } = useAuth();
+  const { hasRole, isOwner, isOwnerOrAccountant } = useAuth();
+  const canViewFinancials = isOwnerOrAccountant();
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -530,22 +531,24 @@ const Orders = () => {
                 </div>
 
                 {/* Pricing */}
-                <div className="flex items-center gap-6 lg:gap-8">
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">الإجمالي</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrency(order.price)}</p>
+                {canViewFinancials && (
+                  <div className="flex items-center gap-6 lg:gap-8">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">الإجمالي</p>
+                      <p className="text-lg font-bold text-foreground">{formatCurrency(order.price)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">المدفوع</p>
+                      <p className="text-lg font-bold text-success">{formatCurrency(order.paid)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">المتبقي</p>
+                      <p className={`text-lg font-bold ${order.remaining > 0 ? 'text-destructive' : 'text-success'}`}>
+                        {formatCurrency(order.remaining)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">المدفوع</p>
-                    <p className="text-lg font-bold text-success">{formatCurrency(order.paid)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">المتبقي</p>
-                    <p className={`text-lg font-bold ${order.remaining > 0 ? 'text-destructive' : 'text-success'}`}>
-                      {formatCurrency(order.remaining)}
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-wrap">
@@ -711,22 +714,24 @@ const Orders = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">الإجمالي</p>
-                  <p className="text-xl font-bold text-foreground">{formatCurrency(showViewModal.price)}</p>
+              {canViewFinancials && (
+                <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">الإجمالي</p>
+                    <p className="text-xl font-bold text-foreground">{formatCurrency(showViewModal.price)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">المدفوع</p>
+                    <p className="text-xl font-bold text-success">{formatCurrency(showViewModal.paid)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">المتبقي</p>
+                    <p className={`text-xl font-bold ${showViewModal.remaining > 0 ? 'text-destructive' : 'text-success'}`}>
+                      {formatCurrency(showViewModal.remaining)}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">المدفوع</p>
-                  <p className="text-xl font-bold text-success">{formatCurrency(showViewModal.paid)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">المتبقي</p>
-                  <p className={`text-xl font-bold ${showViewModal.remaining > 0 ? 'text-destructive' : 'text-success'}`}>
-                    {formatCurrency(showViewModal.remaining)}
-                  </p>
-                </div>
-              </div>
+              )}
 
               {/* Order Items with delivery tracking */}
               <OrderItemsManager orderId={showViewModal.id} />

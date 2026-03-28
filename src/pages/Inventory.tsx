@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Plus, Search, Package, Edit, Trash2, AlertTriangle, X, Loader2, FileInput } from 'lucide-react';
 import { useInventory, DbInventory } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, categories } from '@/data/mockData';
 import ExcelImportExport from '@/components/ExcelImportExport';
 
@@ -15,6 +16,8 @@ const Inventory = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { items, loading, addItem, updateItem, deleteItem, fetchItems } = useInventory();
+  const { isOwnerOrAccountant } = useAuth();
+  const canViewFinancials = isOwnerOrAccountant();
   
   const [formData, setFormData] = useState({
     code: '',
@@ -203,8 +206,8 @@ const Inventory = () => {
                 <th className="text-right p-4">التصنيف</th>
                 <th className="text-center p-4">الكمية</th>
                 <th className="text-center p-4">الوحدة</th>
-                <th className="text-center p-4">حد التنبيه</th>
-                <th className="text-center p-4">سعر الشراء</th>
+                <th className="text-center p-4">حدد التنبيه</th>
+                {canViewFinancials && <th className="text-center p-4">سعر الشراء</th>}
                 <th className="text-center p-4">الحالة</th>
                 <th className="text-center p-4">إجراءات</th>
               </tr>
@@ -244,9 +247,11 @@ const Inventory = () => {
                     <td className="p-4 text-center text-muted-foreground">
                       {item.alert_threshold}
                     </td>
-                    <td className="p-4 text-center font-medium">
-                      {formatCurrency(item.purchase_price)}
-                    </td>
+                    {canViewFinancials && (
+                      <td className="p-4 text-center font-medium">
+                        {formatCurrency(item.purchase_price)}
+                      </td>
+                    )}
                     <td className="p-4 text-center">
                       {isLowStock ? (
                         <span className="inline-flex items-center gap-1 px-3 py-1 bg-destructive/10 text-destructive rounded-full text-sm">
@@ -379,15 +384,17 @@ const Inventory = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
-                <input
-                  type="number"
-                  value={formData.purchase_price}
-                  onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
-                  className="input-field"
-                />
-              </div>
+              {canViewFinancials && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
+                  <input
+                    type="number"
+                    value={formData.purchase_price}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
+                    className="input-field"
+                  />
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button
@@ -490,15 +497,17 @@ const Inventory = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
-                <input
-                  type="number"
-                  value={formData.purchase_price}
-                  onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
-                  className="input-field"
-                />
-              </div>
+              {canViewFinancials && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
+                  <input
+                    type="number"
+                    value={formData.purchase_price}
+                    onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
+                    className="input-field"
+                  />
+                </div>
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

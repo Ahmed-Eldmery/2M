@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Truck, Phone, DollarSign, Package, Edit, X, Loader2, FileText, Eye } from 'lucide-react';
 import { useSuppliers, useInventoryReceipts, DbSupplier } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/data/mockData';
 import ExcelImportExport from '@/components/ExcelImportExport';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +10,8 @@ const Suppliers = () => {
   const navigate = useNavigate();
   const { suppliers, loading, addSupplier, updateSupplier, fetchSuppliers } = useSuppliers();
   const { receipts } = useInventoryReceipts();
+  const { isOwnerOrAccountant } = useAuth();
+  const canViewFinancials = isOwnerOrAccountant();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<DbSupplier | null>(null);
@@ -142,17 +145,19 @@ const Suppliers = () => {
           </div>
         </div>
 
-        <div className="glass-card p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-destructive" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">إجمالي المستحقات</p>
-              <p className="text-2xl font-bold text-destructive">{formatCurrency(totalOwed)}</p>
+        {canViewFinancials && (
+          <div className="glass-card p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-destructive" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">إجمالي المستحقات</p>
+                <p className="text-2xl font-bold text-destructive">{formatCurrency(totalOwed)}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="glass-card p-6">
           <div className="flex items-center gap-4">
@@ -227,24 +232,28 @@ const Suppliers = () => {
               )}
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                <div>
-                  <p className="text-sm text-muted-foreground">إجمالي المشتريات</p>
-                  <p className="text-xl font-bold text-primary">{formatCurrency(totalPurchases)}</p>
-                </div>
+                {canViewFinancials && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">إجمالي المشتريات</p>
+                    <p className="text-xl font-bold text-primary">{formatCurrency(totalPurchases)}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-muted-foreground">عدد الفواتير</p>
                   <p className="text-xl font-bold text-foreground">{supplierReceipts.length}</p>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">المستحقات</span>
-                  <span className={`text-xl font-bold ${supplier.total_owed > 0 ? 'text-destructive' : 'text-success'}`}>
-                    {formatCurrency(supplier.total_owed)}
-                  </span>
+              {canViewFinancials && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">المستحقات</span>
+                    <span className={`text-xl font-bold ${supplier.total_owed > 0 ? 'text-destructive' : 'text-success'}`}>
+                      {formatCurrency(supplier.total_owed)}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
@@ -264,9 +273,11 @@ const Suppliers = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-foreground">فواتير المورد - {viewingSupplier.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  إجمالي المشتريات: {formatCurrency(getSupplierTotalPurchases(viewingSupplier.id))}
-                </p>
+                {canViewFinancials && (
+                  <p className="text-sm text-muted-foreground">
+                    إجمالي المشتريات: {formatCurrency(getSupplierTotalPurchases(viewingSupplier.id))}
+                  </p>
+                )}
               </div>
               <button 
                 onClick={() => setViewingSupplier(null)}
@@ -283,7 +294,9 @@ const Suppliers = () => {
                     <div key={receipt.id} className="bg-muted/50 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-mono text-primary font-bold">{receipt.receipt_number}</span>
-                        <span className="text-lg font-bold text-foreground">{formatCurrency(receipt.total_amount)}</span>
+                        {canViewFinancials && (
+                          <span className="text-lg font-bold text-foreground">{formatCurrency(receipt.total_amount)}</span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>{new Date(receipt.created_at).toLocaleDateString('ar-EG')}</span>
@@ -305,7 +318,7 @@ const Suppliers = () => {
                                 {item.item_name}
                               </span>
                               <span className="text-muted-foreground">
-                                {item.quantity} × {formatCurrency(item.unit_price)} = {formatCurrency(item.total_price)}
+                                {item.quantity} {canViewFinancials && `× ${formatCurrency(item.unit_price)} = ${formatCurrency(item.total_price)}`}
                               </span>
                             </div>
                           ))}
@@ -397,15 +410,17 @@ const Suppliers = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">المستحقات (ج.م)</label>
-                <input
-                  type="number"
-                  value={formData.total_owed}
-                  onChange={(e) => setFormData({ ...formData, total_owed: Number(e.target.value) })}
-                  className="input-field"
-                />
-              </div>
+              {canViewFinancials && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">المستحقات (ج.م)</label>
+                  <input
+                    type="number"
+                    value={formData.total_owed}
+                    onChange={(e) => setFormData({ ...formData, total_owed: Number(e.target.value) })}
+                    className="input-field"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">ملاحظات</label>

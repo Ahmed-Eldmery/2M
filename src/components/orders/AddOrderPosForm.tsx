@@ -36,7 +36,12 @@ export default function AddOrderPosForm({ onClose }: AddOrderPosFormProps) {
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const selectedCustomer = useMemo(() => 
+    customers.find(c => c.id === selectedCustomerId),
+    [customers, selectedCustomerId]
+  );
   const [customerName, setCustomerName] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState<'regular' | 'office'>('regular');
 
   // Lines State
   const [lines, setLines] = useState<PosOrderLine[]>([]);
@@ -109,11 +114,19 @@ export default function AddOrderPosForm({ onClose }: AddOrderPosFormProps) {
   };
 
   const handleSelectMaterial = (item: DbInventory) => {
+    const isOffice = selectedCustomerId 
+      ? selectedCustomer?.customer_type === 'office'
+      : newCustomerType === 'office';
+      
+    const sellingPrice = isOffice 
+      ? (item.office_selling_price || item.selling_price || item.purchase_price * 2)
+      : (item.selling_price || item.purchase_price * 2);
+
     updateCurrentLine({
       inventory_id: item.id,
       itemName: item.name,
-      unit: item.unit,
-      unitPrice: item.purchase_price * 2, // Example default markup
+      unit: item.unit as any,
+      unitPrice: sellingPrice,
     });
     setMaterialSearch('');
     setShowMaterialDropdown(false);
@@ -170,7 +183,12 @@ export default function AddOrderPosForm({ onClose }: AddOrderPosFormProps) {
         if (existing) {
           finalCustomerId = existing.id;
         } else {
-          const newCust = await addCustomer({ name: customerName, phone: null, notes: null, customer_type: 'regular' });
+          const newCust = await addCustomer({ 
+            name: customerName, 
+            phone: null, 
+            notes: null, 
+            customer_type: newCustomerType 
+          });
           if (newCust) {
             finalCustomerId = newCust.id;
             toast.success(`تم إضافة العميل "${customerName}" للسيستم`);

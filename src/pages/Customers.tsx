@@ -1,24 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, Search, User, Phone, FileText, Edit, Eye, X, Loader2, Crown, CreditCard, Users } from 'lucide-react';
+import { Plus, Search, User, Phone, FileText, Edit, Eye, X, Loader2, Crown, CreditCard, Users, Building, Trash2 } from 'lucide-react';
 import { useCustomers, useOrders, DbCustomer } from '@/hooks/useSupabaseData';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/data/mockData';
 import ExcelImportExport from '@/components/ExcelImportExport';
 
-type CustomerType = 'regular' | 'open_account' | 'vip';
-type TabFilter = 'all' | 'pending' | 'open_account' | 'vip';
+type CustomerType = 'regular' | 'open_account' | 'vip' | 'office';
+type TabFilter = 'all' | 'pending' | 'open_account' | 'vip' | 'office';
 
 const customerTypeLabels: Record<CustomerType, string> = {
   regular: 'عادي',
   open_account: 'حساب مفتوح',
-  vip: 'VIP'
+  vip: 'VIP',
+  office: 'مكتب'
 };
 
 const customerTypeIcons: Record<CustomerType, React.ReactNode> = {
   regular: <User className="w-4 h-4" />,
   open_account: <CreditCard className="w-4 h-4" />,
-  vip: <Crown className="w-4 h-4" />
+  vip: <Crown className="w-4 h-4" />,
+  office: <Building className="w-4 h-4" />
 };
 
 const Customers = () => {
@@ -29,8 +31,9 @@ const Customers = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<DbCustomer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
-  const { customers, loading, addCustomer, updateCustomer, fetchCustomers } = useCustomers();
+  const { customers, loading, addCustomer, updateCustomer, fetchCustomers, deleteMultipleCustomers } = useCustomers();
   const { orders } = useOrders();
   const { isOwnerOrAccountant } = useAuth();
   
@@ -71,6 +74,8 @@ const Customers = () => {
         return customer.customer_type === 'open_account';
       case 'vip':
         return customer.customer_type === 'vip';
+      case 'office':
+        return customer.customer_type === 'office';
       default:
         return true;
     }
@@ -82,6 +87,7 @@ const Customers = () => {
     pending: customers.filter(c => getCustomerPending(c.id) > 0).length,
     open_account: customers.filter(c => c.customer_type === 'open_account').length,
     vip: customers.filter(c => c.customer_type === 'vip').length,
+    office: customers.filter(c => c.customer_type === 'office').length,
   };
 
   const handleAddCustomer = async () => {
@@ -101,6 +107,38 @@ const Customers = () => {
       // Error handled in hook
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`هل أنت متأكد من حذف ${selectedIds.size} عملاء؟`)) {
+      try {
+        setIsSubmitting(true);
+        await deleteMultipleCustomers(Array.from(selectedIds));
+        setSelectedIds(new Set());
+      } catch (error) {
+        // Error handled in hook
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCustomers.map(c => c.id)));
     }
   };
 
@@ -140,6 +178,8 @@ const Customers = () => {
         return 'bg-warning/15 text-warning border-warning/30';
       case 'open_account':
         return 'bg-info/15 text-info border-info/30';
+      case 'office':
+        return 'bg-accent/15 text-accent border-accent/30';
       default:
         return 'bg-muted text-muted-foreground border-border';
     }
@@ -162,8 +202,28 @@ const Customers = () => {
           <p className="text-muted-foreground">قاعدة بيانات العملاء وسجل التعاملات</p>
         </div>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleBulkDelete} 
+              className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={isSubmitting}
+            >
+              <Trash2 className="w-5 h-5" />
+              حذف المختار ({selectedIds.size})
+            </button>
+          )}
           <ExcelImportExport tableName="customers" onImportComplete={fetchCustomers} />
-          <button onClick={() => setShowAddModal(true)} className="btn-primary">
+          <button onClick={() => {
+            setFormData({ name: '', phone: '', notes: '', customer_type: 'office' });
+            setShowAddModal(true);
+          }} className="btn-outline border-accent text-accent hover:bg-accent hover:text-accent-foreground">
+            <Building className="w-5 h-5" />
+            إضافة مكتب
+          </button>
+          <button onClick={() => {
+            setFormData({ name: '', phone: '', notes: '', customer_type: 'regular' });
+            setShowAddModal(true);
+          }} className="btn-primary">
             <Plus className="w-5 h-5" />
             عميل جديد
           </button>
@@ -172,6 +232,18 @@ const Customers = () => {
 
       {/* Tabs and Search */}
       <div className="glass-card p-4 space-y-4">
+        {/* Select All */}
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            checked={selectedIds.size > 0 && selectedIds.size === filteredCustomers.length}
+            onChange={toggleSelectAll}
+            className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm font-medium text-muted-foreground">
+            {selectedIds.size === filteredCustomers.length ? 'إلغاء تحديد الكل' : 'تحديد الكل من هذه القائمة'}
+          </span>
+        </div>
         {/* Tabs */}
         <div className="flex gap-2 flex-wrap">
           <button
@@ -218,6 +290,17 @@ const Customers = () => {
             <Crown className="w-4 h-4" />
             VIP ({tabCounts.vip})
           </button>
+          <button
+            onClick={() => setActiveTab('office')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'office' 
+                ? 'bg-accent text-accent-foreground' 
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            مكاتب ({tabCounts.office})
+          </button>
         </div>
 
         {/* Search */}
@@ -240,7 +323,15 @@ const Customers = () => {
           const customerOrders = getCustomerOrders(customer.id);
 
           return (
-            <div key={customer.id} className="glass-card p-6 hover:shadow-lg transition-shadow">
+            <div key={customer.id} className={`glass-card p-6 hover:shadow-lg transition-all relative ${selectedIds.has(customer.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}>
+              <div className="absolute top-4 left-4 z-10">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(customer.id)}
+                  onChange={() => toggleSelection(customer.id)}
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                />
+              </div>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
@@ -248,12 +339,16 @@ const Customers = () => {
                       ? 'bg-warning/20' 
                       : customer.customer_type === 'open_account' 
                         ? 'bg-info/20' 
-                        : 'bg-primary/10'
+                        : customer.customer_type === 'office'
+                          ? 'bg-accent/20'
+                          : 'bg-primary/10'
                   }`}>
                     {customer.customer_type === 'vip' ? (
                       <Crown className="w-6 h-6 text-warning" />
                     ) : customer.customer_type === 'open_account' ? (
                       <CreditCard className="w-6 h-6 text-info" />
+                    ) : customer.customer_type === 'office' ? (
+                      <Building className="w-6 h-6 text-accent" />
                     ) : (
                       <User className="w-6 h-6 text-primary" />
                     )}
@@ -393,8 +488,8 @@ const Customers = () => {
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">نوع العميل</label>
-                <div className="flex gap-2">
-                  {(['regular', 'open_account', 'vip'] as CustomerType[]).map(type => (
+                <div className="flex gap-2 flex-wrap">
+                  {(['regular', 'open_account', 'vip', 'office'] as CustomerType[]).map(type => (
                     <button
                       key={type}
                       type="button"
@@ -405,7 +500,9 @@ const Customers = () => {
                             ? 'bg-warning text-warning-foreground border-warning'
                             : type === 'open_account'
                               ? 'bg-info text-info-foreground border-info'
-                              : 'bg-primary text-primary-foreground border-primary'
+                              : type === 'office'
+                            ? 'bg-accent text-accent-foreground border-accent'
+                            : 'bg-primary text-primary-foreground border-primary'
                           : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
                       }`}
                     >

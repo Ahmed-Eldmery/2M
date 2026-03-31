@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Truck, Phone, DollarSign, Package, Edit, X, Loader2, FileText, Eye } from 'lucide-react';
+import { Plus, Search, Truck, Phone, DollarSign, Package, Edit, X, Loader2, FileText, Eye, Trash2 } from 'lucide-react';
 import { useSuppliers, useInventoryReceipts, DbSupplier } from '@/hooks/useSupabaseData';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency } from '@/data/mockData';
@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 
 const Suppliers = () => {
   const navigate = useNavigate();
-  const { suppliers, loading, addSupplier, updateSupplier, fetchSuppliers } = useSuppliers();
+  const { suppliers, loading, addSupplier, updateSupplier, fetchSuppliers, deleteMultipleSuppliers } = useSuppliers();
   const { receipts } = useInventoryReceipts();
   const { isOwnerOrAccountant } = useAuth();
   const canViewFinancials = isOwnerOrAccountant();
@@ -17,6 +17,7 @@ const Suppliers = () => {
   const [editingSupplier, setEditingSupplier] = useState<DbSupplier | null>(null);
   const [viewingSupplier, setViewingSupplier] = useState<DbSupplier | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [formData, setFormData] = useState({
     name: '',
@@ -31,6 +32,36 @@ const Suppliers = () => {
   );
 
   const totalOwed = suppliers.reduce((sum, s) => sum + s.total_owed, 0);
+
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredSuppliers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredSuppliers.map(s => s.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`هل أنت متأكد من حذف ${selectedIds.size} مورد؟`)) return;
+    
+    setIsSubmitting(true);
+    try {
+      await deleteMultipleSuppliers(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    } catch (error) {
+      // Error handled in hook
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Get receipts for a specific supplier
   const getSupplierReceipts = (supplierId: string) => {
@@ -113,6 +144,16 @@ const Suppliers = () => {
           <p className="text-muted-foreground">إدارة الموردين والمستحقات وفواتير الوارد</p>
         </div>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleBulkDelete} 
+              className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={isSubmitting}
+            >
+              <Trash2 className="w-5 h-5" />
+              حذف المختار ({selectedIds.size})
+            </button>
+          )}
           <button 
             onClick={() => navigate('/inventory-receipts')}
             className="btn-outline"
@@ -175,7 +216,19 @@ const Suppliers = () => {
       </div>
 
       {/* Search */}
-      <div className="glass-card p-4">
+      <div className="glass-card p-4 space-y-4">
+        {/* Select All */}
+        <div className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            checked={selectedIds.size > 0 && selectedIds.size === filteredSuppliers.length}
+            onChange={toggleSelectAll}
+            className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm font-medium text-muted-foreground">
+            {selectedIds.size === filteredSuppliers.length ? 'إلغاء تحديد الكل' : 'تحديد الكل من هذه القائمة'}
+          </span>
+        </div>
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
@@ -195,7 +248,15 @@ const Suppliers = () => {
           const totalPurchases = getSupplierTotalPurchases(supplier.id);
           
           return (
-            <div key={supplier.id} className="glass-card p-6 hover:shadow-lg transition-shadow">
+            <div key={supplier.id} className={`glass-card p-6 hover:shadow-lg transition-all relative ${selectedIds.has(supplier.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}>
+              <div className="absolute top-4 left-4 z-10">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(supplier.id)}
+                  onChange={() => toggleSelection(supplier.id)}
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                />
+              </div>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">

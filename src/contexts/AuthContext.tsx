@@ -175,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const canAccessInventory = () => isOwner() || hasRole('warehouse');
   const canAccessOrders = () => true; // All authenticated users can view orders
   const canAccessAccounting = () => isOwnerOrAccountant();
-  const canAccessEmployees = () => isOwnerOrAccountant();
+  const canAccessEmployees = () => isOwner();
 
   return (
     <AuthContext.Provider value={{

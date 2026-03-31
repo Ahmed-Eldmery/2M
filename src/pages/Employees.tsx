@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, User, Phone, DollarSign, Calendar, Edit, FileText, X, Loader2, Check } from 'lucide-react';
+import { Plus, User, Phone, DollarSign, Calendar, Edit, FileText, X, Loader2, Check, Trash2 } from 'lucide-react';
 import { useEmployees, DbEmployee } from '@/hooks/useSupabaseData';
 import { formatCurrency } from '@/data/mockData';
 import ExcelImportExport from '@/components/ExcelImportExport';
@@ -25,8 +25,9 @@ const Employees = () => {
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<DbEmployee | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { employees, loading, addEmployee, updateEmployee, fetchEmployees } = useEmployees();
+  const { employees, loading, addEmployee, updateEmployee, fetchEmployees, deleteMultipleEmployees } = useEmployees();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -53,6 +54,38 @@ const Employees = () => {
       phone: '',
       hire_date: new Date().toISOString().split('T')[0],
     });
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === employees.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(employees.map(e => e.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsSubmitting(true);
+    try {
+      await deleteMultipleEmployees(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      toast.success('تم حذف الموظفين المحددين');
+    } catch (error) {
+      toast.error('فشل في حذف الموظفين');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddEmployee = async () => {
@@ -188,6 +221,16 @@ const Employees = () => {
           <p className="text-muted-foreground">إدارة بيانات الموظفين والرواتب</p>
         </div>
         <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleBulkDelete} 
+              className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={isSubmitting}
+            >
+              <Trash2 className="w-5 h-5" />
+              حذف المختار ({selectedIds.size})
+            </button>
+          )}
           <ExcelImportExport tableName="employees" onImportComplete={fetchEmployees} />
           <button 
             onClick={() => setShowAddModal(true)}
@@ -240,10 +283,31 @@ const Employees = () => {
         </div>
       </div>
 
+      {/* Select All */}
+      {employees.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border border-border w-fit">
+          <input
+            type="checkbox"
+            checked={selectedIds.size > 0 && selectedIds.size === employees.length}
+            onChange={toggleSelectAll}
+            className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+          />
+          <span className="text-sm font-medium text-muted-foreground">تحديد الكل</span>
+        </div>
+      )}
+
       {/* Employees List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {employees.map((employee) => (
-          <div key={employee.id} className="glass-card p-6 hover:shadow-lg transition-shadow">
+          <div key={employee.id} className={`glass-card p-6 hover:shadow-lg transition-all relative ${selectedIds.has(employee.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}>
+            <div className="absolute top-4 left-4 z-10">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(employee.id)}
+                onChange={() => toggleSelection(employee.id)}
+                className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+            </div>
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">

@@ -94,15 +94,13 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         {/* Signatures */}
         <div className="grid grid-cols-2 gap-8 mt-12">
-          <div className="text-center">
-            <div className="border-t border-black pt-2">
-              <p className="text-sm">توقيع العميل</p>
-            </div>
+          <div className="text-center pt-4">
+            <p className="text-xs text-muted-foreground mb-1">المسؤول عن الطباعة</p>
+            <p className="font-bold underline">{order.printed_by || '....................'}</p>
           </div>
-          <div className="text-center">
-            <div className="border-t border-black pt-2">
-              <p className="text-sm">توقيع المسؤول</p>
-            </div>
+          <div className="text-center pt-4">
+            <p className="text-xs text-muted-foreground mb-1">توقيع المسؤول</p>
+            <p className="font-bold text-lg">....................</p>
           </div>
         </div>
 

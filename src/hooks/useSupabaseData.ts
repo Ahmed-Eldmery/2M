@@ -38,6 +38,9 @@ export interface DbInventory {
   quantity: number;
   alert_threshold: number;
   purchase_price: number;
+  selling_price?: number;
+  office_purchase_price?: number;
+  office_selling_price?: number;
   created_at: string;
   updated_at: string;
 }
@@ -79,7 +82,7 @@ export interface DbCustomer {
   notes: string | null;
   total_orders: number;
   total_spent: number;
-  customer_type: 'regular' | 'open_account' | 'vip';
+  customer_type: 'regular' | 'open_account' | 'vip' | 'office';
   created_at: string;
 }
 
@@ -97,6 +100,8 @@ export interface DbPrintOrder {
   status: 'new' | 'design' | 'printing' | 'printed' | 'waiting_outside' | 'delivered';
   notes: string | null;
   created_by: string | null;
+  printed_by?: string | null;
+  status_updated_by_email?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -179,7 +184,18 @@ export function useInventory() {
     fetchItems();
   }, [fetchItems]);
 
-  const addItem = async (item: { name: string; category: string; unit: string; quantity: number; alert_threshold: number; purchase_price: number; code?: string | null }) => {
+  const addItem = async (item: { 
+    name: string; 
+    category: string; 
+    unit: string; 
+    quantity: number; 
+    alert_threshold: number; 
+    purchase_price: number; 
+    selling_price?: number;
+    office_purchase_price?: number;
+    office_selling_price?: number;
+    code?: string | null 
+  }) => {
     try {
       const { data, error } = await supabase
         .from('inventory')
@@ -235,7 +251,24 @@ export function useInventory() {
     }
   };
 
-  return { items, loading, fetchItems, addItem, updateItem, deleteItem };
+  const deleteMultipleItems = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+      setItems(prev => prev.filter(item => !ids.includes(item.id)));
+      toast.success(`تم حذف ${ids.length} أصناف بنجاح`);
+    } catch (error: any) {
+      console.error('Error deleting multiple inventory items:', error);
+      toast.error('خطأ في حذف الأصناف المختارة');
+      throw error;
+    }
+  };
+
+  return { items, loading, fetchItems, addItem, updateItem, deleteItem, deleteMultipleItems };
 }
 
 // Inventory Receipts hooks
@@ -417,7 +450,7 @@ export function useCustomers() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  const addCustomer = async (customer: Omit<DbCustomer, 'id' | 'created_at' | 'total_orders' | 'total_spent' | 'customer_type'> & { customer_type?: 'regular' | 'open_account' | 'vip' }) => {
+  const addCustomer = async (customer: Omit<DbCustomer, 'id' | 'created_at' | 'total_orders' | 'total_spent' | 'customer_type'> & { customer_type?: DbCustomer['customer_type'] }) => {
     try {
       const { data, error } = await supabase
         .from('customers')
@@ -431,7 +464,7 @@ export function useCustomers() {
       return data;
     } catch (error: any) {
       console.error('Error adding customer:', error);
-      toast.error('خطأ في إضافة العميل');
+      toast.error(`خطأ في إضافة العميل: ${error.message || 'خطأ غير معروف'}`);
       throw error;
     }
   };
@@ -451,12 +484,46 @@ export function useCustomers() {
       return data;
     } catch (error: any) {
       console.error('Error updating customer:', error);
-      toast.error('خطأ في تحديث بيانات العميل');
+      toast.error(`خطأ في تحديث بيانات العميل: ${error.message || 'خطأ غير معروف'}`);
       throw error;
     }
   };
 
-  return { customers, loading, fetchCustomers, addCustomer, updateCustomer };
+  const deleteCustomer = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setCustomers(prev => prev.filter(c => c.id !== id));
+      toast.success('تم حذف العميل بنجاح');
+    } catch (error: any) {
+      console.error('Error deleting customer:', error);
+      toast.error('خطأ في حذف العميل');
+      throw error;
+    }
+  };
+
+  const deleteMultipleCustomers = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+      setCustomers(prev => prev.filter(c => !ids.includes(c.id)));
+      toast.success(`تم حذف ${ids.length} عملاء بنجاح`);
+    } catch (error: any) {
+      console.error('Error deleting multiple customers:', error);
+      toast.error('خطأ في حذف العملاء المختارين');
+      throw error;
+    }
+  };
+
+  return { customers, loading, fetchCustomers, addCustomer, updateCustomer, deleteCustomer, deleteMultipleCustomers };
 }
 
 // Orders hooks
@@ -538,9 +605,10 @@ export function useOrders() {
 
   const updateOrderStatus = async (id: string, status: DbPrintOrder['status']) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from('print_orders')
-        .update({ status })
+        .update({ status, status_updated_by_email: user?.email })
         .eq('id', id)
         .select()
         .single();
@@ -574,7 +642,50 @@ export function useOrders() {
     }
   };
 
-  return { orders, loading, fetchOrders, addOrder, updateOrderStatus, updateOrder };
+  const deleteOrder = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('print_orders')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setOrders(prev => prev.filter(o => o.id !== id));
+      toast.success('تم حذف الطلب بنجاح');
+    } catch (error: any) {
+      console.error('Error deleting order:', error);
+      toast.error('خطأ في حذف الطلب');
+      throw error;
+    }
+  };
+
+  const deleteMultipleOrders = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('print_orders')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+      setOrders(prev => prev.filter(o => !ids.includes(o.id)));
+      toast.success(`تم حذف ${ids.length} طلبات بنجاح`);
+    } catch (error: any) {
+      console.error('Error deleting multiple orders:', error);
+      toast.error('خطأ في حذف الطلبات المختارة');
+      throw error;
+    }
+  };
+
+  return {
+    orders,
+    loading,
+    fetchOrders,
+    addOrder,
+    updateOrder,
+    updateOrderStatus,
+    deleteOrder,
+    deleteMultipleOrders
+  };
 }
 
 // Transactions hooks
@@ -691,7 +802,41 @@ export function useEmployees() {
     }
   };
 
-  return { employees, loading, fetchEmployees, addEmployee, updateEmployee };
+  const deleteEmployee = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setEmployees(prev => prev.filter(e => e.id !== id));
+      toast.success('تم حذف الموظف بنجاح');
+    } catch (error: any) {
+      console.error('Error deleting employee:', error);
+      toast.error('خطأ في حذف الموظف');
+      throw error;
+    }
+  };
+
+  const deleteMultipleEmployees = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+      setEmployees(prev => prev.filter(e => !ids.includes(e.id)));
+      toast.success(`تم حذف ${ids.length} موظفين بنجاح`);
+    } catch (error: any) {
+      console.error('Error deleting multiple employees:', error);
+      toast.error('خطأ في حذف الموظفين المختارين');
+      throw error;
+    }
+  };
+
+  return { employees, loading, fetchEmployees, addEmployee, updateEmployee, deleteEmployee, deleteMultipleEmployees };
 }
 
 // Suppliers hooks
@@ -759,7 +904,41 @@ export function useSuppliers() {
     }
   };
 
-  return { suppliers, loading, fetchSuppliers, addSupplier, updateSupplier };
+  const deleteSupplier = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('suppliers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setSuppliers(prev => prev.filter(s => s.id !== id));
+      toast.success('تم حذف المورد بنجاح');
+    } catch (error: any) {
+      console.error('Error deleting supplier:', error);
+      toast.error('خطأ في حذف المورد');
+      throw error;
+    }
+  };
+
+  const deleteMultipleSuppliers = async (ids: string[]) => {
+    try {
+      const { error } = await supabase
+        .from('suppliers')
+        .delete()
+        .in('id', ids);
+
+      if (error) throw error;
+      setSuppliers(prev => prev.filter(s => !ids.includes(s.id)));
+      toast.success(`تم حذف ${ids.length} موردين بنجاح`);
+    } catch (error: any) {
+      console.error('Error deleting multiple suppliers:', error);
+      toast.error('خطأ في حذف الموردين المختارين');
+      throw error;
+    }
+  };
+
+  return { suppliers, loading, fetchSuppliers, addSupplier, updateSupplier, deleteSupplier, deleteMultipleSuppliers };
 }
 
 // Notifications hooks

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Eye, Edit, Printer, X, ArrowLeft, AlertCircle, Loader2, Sparkles, Package, Trash2, ListChecks } from 'lucide-react';
-import { useOrders, useCustomers, useInventory, useOrderInventory, DbPrintOrder, DbInventory } from '@/hooks/useSupabaseData';
+import { useOrders, useCustomers, useInventory, useOrderInventory, useTransactions, DbPrintOrder, DbInventory } from '@/hooks/useSupabaseData';
 import { useOrderItems } from '@/hooks/useOrderItems';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, workTypes } from '@/data/mockData';
@@ -34,8 +34,10 @@ const Orders = () => {
   const [showWaitingPopup, setShowWaitingPopup] = useState<DbPrintOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<DbPrintOrder | null>(null);
   const [printOrder, setPrintOrder] = useState<DbPrintOrder | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { orders, loading, addOrder, updateOrderStatus, updateOrder, fetchOrders } = useOrders();
+  const { orders, loading, addOrder, updateOrderStatus, updateOrder, fetchOrders, deleteMultipleOrders } = useOrders();
+  const { addTransaction } = useTransactions();
   const { customers, addCustomer } = useCustomers();
   const { items: inventoryItems } = useInventory();
   const { addOrderInventoryItems } = useOrderInventory();
@@ -55,6 +57,13 @@ const Orders = () => {
     documentTitle: printOrder ? `إذن_${printOrder.order_number}` : 'إذن_طباعة',
     onAfterPrint: () => setPrintOrder(null),
   });
+
+  const [notes, setNotes] = useState('');
+  
+  // Printing State
+  const [showPrinterPrompt, setShowPrinterPrompt] = useState(false);
+  const [printerName, setPrinterName] = useState('');
+  const [pendingPrintOrder, setPendingPrintOrder] = useState<DbPrintOrder | null>(null);
 
   const [formData, setFormData] = useState({
     customer_id: '',
@@ -191,6 +200,38 @@ const Orders = () => {
 
   const statusCounts = getStatusCounts();
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`هل أنت متأكد من حذف ${selectedIds.size} طلبات؟`)) {
+      try {
+        setIsSubmitting(true);
+        await deleteMultipleOrders(Array.from(selectedIds));
+        setSelectedIds(new Set());
+      } catch (error) {
+        // Error handled in hook
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (filteredOrders: DbPrintOrder[]) => {
+    if (selectedIds.size === filteredOrders.length && filteredOrders.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.order_number.includes(searchQuery) || 
@@ -301,6 +342,21 @@ const Orders = () => {
 
     setIsSubmitting(true);
     try {
+      // Check for payment update to sync with transactions
+      if (formData.paid > editingOrder.paid) {
+        const extraPayment = formData.paid - editingOrder.paid;
+        await addTransaction({
+          type: 'income',
+          amount: extraPayment,
+          category: 'طباعة',
+          description: `دفعة متبقية - طلب رقم ${editingOrder.order_number} - ${editingOrder.customer_name}`,
+          order_id: editingOrder.id,
+          payment_method: 'cash', // Default to cash for updates
+          recipient: null,
+        });
+        toast.success(`تم تسجيل دفعة إضافية بقيمة ${extraPayment} ج.م`);
+      }
+
       await updateOrder(editingOrder.id, {
         customer_name: formData.customer_name,
         work_type: formData.work_type,
@@ -386,8 +442,26 @@ const Orders = () => {
   };
 
   const openPrintModal = (order: DbPrintOrder) => {
-    setPrintOrder(order);
-    setTimeout(() => handlePrint(), 100);
+    setPendingPrintOrder(order);
+    setShowPrinterPrompt(true);
+  };
+
+  const confirmPrint = () => {
+    if (!pendingPrintOrder) return;
+    
+    // Create a temporary order object with the printer name
+    const orderWithPrinter = {
+      ...pendingPrintOrder,
+      printed_by: printerName || 'غير محدد'
+    };
+    
+    setPrintOrder(orderWithPrinter);
+    setShowPrinterPrompt(false);
+    setTimeout(() => {
+      handlePrint();
+      setPrinterName('');
+      setPendingPrintOrder(null);
+    }, 100);
   };
 
   const getUpdatedStatusLabel = (status: OrderStatus) => {
@@ -431,13 +505,66 @@ const Orders = () => {
         </div>
       </div>
 
+      {/* Printer Name Prompt */}
+      {showPrinterPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-card rounded-xl p-6 w-full max-w-sm animate-scale-in">
+            <h2 className="text-xl font-bold text-foreground mb-4">من يقوم بالطباعة؟</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">اسم الموظف</label>
+                <input
+                  type="text"
+                  value={printerName}
+                  onChange={(e) => setPrinterName(e.target.value)}
+                  className="input-field"
+                  placeholder="مثال: أحمد، محمد، ..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') confirmPrint();
+                  }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmPrint}
+                  className="btn-primary flex-1"
+                >
+                  تأكيد وطباعة
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPrinterPrompt(false);
+                    setPendingPrintOrder(null);
+                    setPrinterName('');
+                  }}
+                  className="btn-outline flex-1"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">أوامر الطباعة</h1>
           <p className="text-muted-foreground">إدارة ومتابعة أوامر الطباعة والتسليم</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleBulkDelete} 
+              className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={isSubmitting}
+            >
+              <Trash2 className="w-5 h-5" />
+              حذف المختار ({selectedIds.size})
+            </button>
+          )}
           <ExcelImportExport tableName="print_orders" onImportComplete={fetchOrders} />
           <button 
             onClick={() => setShowAddModal(true)}
@@ -464,8 +591,16 @@ const Orders = () => {
             />
           </div>
 
-          {/* Status Filter */}
           <div className="flex gap-2 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1 bg-muted rounded-lg border border-border">
+              <input
+                type="checkbox"
+                checked={selectedIds.size > 0 && selectedIds.size === filteredOrders.length}
+                onChange={() => toggleSelectAll(filteredOrders)}
+                className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <span className="text-sm font-medium text-muted-foreground">تحديد الكل</span>
+            </div>
             {statusOptions.map(option => (
               <button
                 key={option.value}
@@ -494,12 +629,22 @@ const Orders = () => {
           const nextStatus = getNextStatus(order.status);
           const prevStatus = getPrevStatus(order.status);
           const isNew = isNewOrder(order);
+          const isSelected = selectedIds.has(order.id);
 
           return (
             <div 
               key={order.id} 
-              className={`glass-card p-6 hover:shadow-lg transition-shadow relative ${isNew ? 'ring-2 ring-primary' : ''}`}
+              className={`glass-card p-6 hover:shadow-lg transition-all relative ${isNew ? 'ring-2 ring-primary bg-primary/5' : ''} ${isSelected ? 'ring-2 ring-primary bg-primary/10' : ''}`}
             >
+              <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleSelection(order.id)}
+                  className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                />
+              </div>
+
               {isNew && (
                 <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center animate-bounce">
                   <Sparkles className="w-4 h-4 text-primary-foreground" />
@@ -553,7 +698,7 @@ const Orders = () => {
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Previous Status Button */}
-                  {prevStatus && (
+                  {prevStatus && isOwnerOrAccountant() && (
                     <button 
                       onClick={() => handleStatusChange(order.id, prevStatus)}
                       className="btn-outline text-sm py-2"

@@ -14,8 +14,9 @@ const Inventory = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingItem, setEditingItem] = useState<DbInventory | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { items, loading, addItem, updateItem, deleteItem, fetchItems } = useInventory();
+  const { items, loading, addItem, updateItem, deleteItem, fetchItems, deleteMultipleItems } = useInventory();
   const { isOwnerOrAccountant } = useAuth();
   const canViewFinancials = isOwnerOrAccountant();
   
@@ -27,6 +28,9 @@ const Inventory = () => {
     quantity: 0,
     alert_threshold: 10,
     purchase_price: 0,
+    selling_price: 0,
+    office_purchase_price: 0,
+    office_selling_price: 0,
   });
 
   useEffect(() => {
@@ -62,6 +66,9 @@ const Inventory = () => {
       quantity: 0,
       alert_threshold: 10,
       purchase_price: 0,
+      selling_price: 0,
+      office_purchase_price: 0,
+      office_selling_price: 0,
     });
   };
 
@@ -105,6 +112,9 @@ const Inventory = () => {
       quantity: item.quantity,
       alert_threshold: item.alert_threshold,
       purchase_price: item.purchase_price,
+      selling_price: item.selling_price || 0,
+      office_purchase_price: item.office_purchase_price || 0,
+      office_selling_price: item.office_selling_price || 0,
     });
     setEditingItem(item);
     setShowEditModal(true);
@@ -113,6 +123,38 @@ const Inventory = () => {
   const handleDeleteItem = async (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا الصنف؟')) {
       await deleteItem(id);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`هل أنت متأكد من حذف ${selectedIds.size} أصناف؟`)) {
+      try {
+        setIsSubmitting(true);
+        await deleteMultipleItems(Array.from(selectedIds));
+        setSelectedIds(new Set());
+      } catch (error) {
+        // Error handled in hook
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredItems.length && filteredItems.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredItems.map(item => item.id)));
     }
   };
 
@@ -133,6 +175,16 @@ const Inventory = () => {
           <p className="text-muted-foreground">إدارة الخامات والمواد المتوفرة</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleBulkDelete} 
+              className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={isSubmitting}
+            >
+              <Trash2 className="w-5 h-5" />
+              حذف المختار ({selectedIds.size})
+            </button>
+          )}
           <ExcelImportExport tableName="inventory" onImportComplete={fetchItems} />
           <Link 
             to="/inventory/receipts"
@@ -201,6 +253,14 @@ const Inventory = () => {
           <table className="w-full">
             <thead>
               <tr className="table-header">
+                <th className="p-4 w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size > 0 && selectedIds.size === filteredItems.length}
+                    onChange={toggleSelectAll}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                </th>
                 <th className="text-right p-4">الكود</th>
                 <th className="text-right p-4">الصنف</th>
                 <th className="text-right p-4">التصنيف</th>
@@ -208,6 +268,8 @@ const Inventory = () => {
                 <th className="text-center p-4">الوحدة</th>
                 <th className="text-center p-4">حدد التنبيه</th>
                 {canViewFinancials && <th className="text-center p-4">سعر الشراء</th>}
+                {canViewFinancials && <th className="text-center p-4">البيع (عادي)</th>}
+                {canViewFinancials && <th className="text-center p-4">البيع (مكاتب)</th>}
                 <th className="text-center p-4">الحالة</th>
                 <th className="text-center p-4">إجراءات</th>
               </tr>
@@ -217,7 +279,15 @@ const Inventory = () => {
                 const isLowStock = item.quantity <= item.alert_threshold;
                 
                 return (
-                  <tr key={item.id} className="border-b border-border hover:bg-muted/30 transition-colors">
+                  <tr key={item.id} className={`border-b border-border hover:bg-muted/30 transition-colors ${selectedIds.has(item.id) ? 'bg-primary/5' : ''}`}>
+                    <td className="p-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleSelection(item.id)}
+                        className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                    </td>
                     <td className="p-4">
                       <span className="font-mono text-sm text-muted-foreground">
                         {item.code || '-'}
@@ -250,6 +320,16 @@ const Inventory = () => {
                     {canViewFinancials && (
                       <td className="p-4 text-center font-medium">
                         {formatCurrency(item.purchase_price)}
+                      </td>
+                    )}
+                    {canViewFinancials && (
+                      <td className="p-4 text-center font-medium text-primary">
+                        {formatCurrency(item.selling_price || 0)}
+                      </td>
+                    )}
+                    {canViewFinancials && (
+                      <td className="p-4 text-center font-medium text-accent">
+                        {formatCurrency(item.office_selling_price || 0)}
                       </td>
                     )}
                     <td className="p-4 text-center">
@@ -385,14 +465,47 @@ const Inventory = () => {
               </div>
 
               {canViewFinancials && (
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
-                  <input
-                    type="number"
-                    value={formData.purchase_price}
-                    onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
-                    className="input-field"
-                  />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء </label>
+                      <input
+                        type="number"
+                        value={formData.purchase_price}
+                        onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">سعر البيع عادي</label>
+                      <input
+                        type="number"
+                        value={formData.selling_price}
+                        onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">شراء مكاتب</label>
+                      <input
+                        type="number"
+                        value={formData.office_purchase_price}
+                        onChange={(e) => setFormData({ ...formData, office_purchase_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">بيع مكاتب</label>
+                      <input
+                        type="number"
+                        value={formData.office_selling_price}
+                        onChange={(e) => setFormData({ ...formData, office_selling_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -498,14 +611,47 @@ const Inventory = () => {
               </div>
 
               {canViewFinancials && (
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء (ج.م)</label>
-                  <input
-                    type="number"
-                    value={formData.purchase_price}
-                    onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
-                    className="input-field"
-                  />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">سعر الشراء عادي</label>
+                      <input
+                        type="number"
+                        value={formData.purchase_price}
+                        onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">سعر البيع عادي</label>
+                      <input
+                        type="number"
+                        value={formData.selling_price}
+                        onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">شراء مكاتب</label>
+                      <input
+                        type="number"
+                        value={formData.office_purchase_price}
+                        onChange={(e) => setFormData({ ...formData, office_purchase_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">بيع مكاتب</label>
+                      <input
+                        type="number"
+                        value={formData.office_selling_price}
+                        onChange={(e) => setFormData({ ...formData, office_selling_price: Number(e.target.value) })}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 

@@ -44,7 +44,7 @@ const getStatusClass = (status: OrderStatus) => {
 
 const getPaymentMethodLabel = (method: string) => {
   const labels: Record<string, string> = {
-    cash: 'كاش',
+    cash: 'نقدي',
     instapay_alaa: 'انستاباي علاء',
     instapay_amr: 'انستاباي عمرو',
     vodafone_alaa: 'فودافون علاء',

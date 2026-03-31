@@ -7,11 +7,11 @@ import { formatCurrency, expenseCategories } from '@/data/mockData';
 type PaymentMethod = 'cash' | 'instapay_alaa' | 'instapay_amr' | 'vodafone_alaa' | 'vodafone_amr';
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
-  cash: 'كاش',
+  cash: 'نقدي',
   instapay_alaa: 'انستا باي - علاء',
   instapay_amr: 'انستا باي - عمرو',
-  vodafone_alaa: 'فودافون كاش - علاء',
-  vodafone_amr: 'فودافون كاش - عمرو',
+  vodafone_alaa: 'فودافون (علاء)',
+  vodafone_amr: 'فودافون (عمرو)',
 };
 
 const Accounting = () => {

@@ -532,7 +532,7 @@ export default function AddOrderPosForm({ onClose }: AddOrderPosFormProps) {
                     onChange={e => setPaymentMethod(e.target.value as any)}
                     className="input-field w-24 md:w-32 text-xs md:text-sm p-1"
                   >
-                    <option value="cash">كاش</option>
+                    <option value="cash">نقدي</option>
                     <option value="vodafone_alaa">فودافون (علاء)</option>
                     <option value="vodafone_amr">فودافون (عمرو)</option>
                     <option value="instapay_alaa">انستا (علاء)</option>

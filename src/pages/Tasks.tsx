@@ -24,6 +24,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useEmployees } from '@/hooks/useSupabaseData';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 interface Task {
@@ -48,6 +49,7 @@ const Tasks = () => {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
 
   const { employees } = useEmployees();
+  const { isOwnerOrAccountant } = useAuth();
 
   const [formData, setFormData] = useState({
     title: '',
@@ -270,12 +272,14 @@ const Tasks = () => {
           setIsDialogOpen(open);
           if (!open) resetForm();
         }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              مهمة جديدة
-            </Button>
-          </DialogTrigger>
+          {isOwnerOrAccountant() && (
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                مهمة جديدة
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>{editingTask ? 'تعديل المهمة' : 'إضافة مهمة جديدة'}</DialogTitle>
@@ -414,24 +418,26 @@ const Tasks = () => {
                             {priorityLabels[task.priority]}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => openEditDialog(task)}
-                          >
-                            <Edit className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-destructive"
-                            onClick={() => handleDelete(task.id)}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
+                        {isOwnerOrAccountant() && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => openEditDialog(task)}
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-destructive"
+                              onClick={() => handleDelete(task.id)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       <h4 className="font-medium text-sm mb-2">{task.title}</h4>

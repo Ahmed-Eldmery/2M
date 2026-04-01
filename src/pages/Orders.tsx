@@ -698,7 +698,7 @@ const Orders = () => {
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Previous Status Button */}
-                  {prevStatus && isOwnerOrAccountant() && (
+                  {prevStatus && (hasRole('owner') || hasRole('accountant') || hasRole('designer')) && (
                     <button 
                       onClick={() => handleStatusChange(order.id, prevStatus)}
                       className="btn-outline text-sm py-2"

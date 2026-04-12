@@ -23,7 +23,7 @@ const Inventory = () => {
   const [formData, setFormData] = useState({
     code: '',
     name: '',
-    category: 'بنرات',
+    category: 'خامات',
     unit: 'sqm' as 'meter' | 'sqm' | 'piece',
     quantity: 0,
     alert_threshold: 10,
@@ -61,7 +61,7 @@ const Inventory = () => {
     setFormData({
       code: '',
       name: '',
-      category: 'بنرات',
+      category: 'خامات',
       unit: 'sqm',
       quantity: 0,
       alert_threshold: 10,

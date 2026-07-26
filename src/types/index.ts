@@ -1,4 +1,4 @@
-export type OrderStatus = 'new' | 'design' | 'printing' | 'printed' | 'delivered';
+﻿export type OrderStatus = 'new' | 'design' | 'printing' | 'printed' | 'waiting_outside' | 'delivered';
 
 export interface InventoryItem {
   id: string;

@@ -1,17 +1,19 @@
 import { forwardRef } from 'react';
 import { DbPrintOrder } from '@/hooks/useSupabaseData';
+import { DbOrderItem } from '@/hooks/useOrderItems';
 import { formatCurrency } from '@/data/mockData';
 
 interface OrderReceiptProps {
   order: DbPrintOrder;
   companyName?: string;
   companyPhone?: string;
+  items?: DbOrderItem[];
 }
 
 const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
-  ({ order, companyName = '2M للدعاية والإعلان', companyPhone = '01000000000' }, ref) => {
+  ({ order, companyName = '2M للدعاية والإعلان', companyPhone = '01000000000', items = [] }, ref) => {
     return (
-      <div 
+      <div
         ref={ref}
         className="bg-white p-8 text-black"
         style={{ width: '210mm', minHeight: '148mm', fontFamily: 'Arial, sans-serif' }}
@@ -51,6 +53,12 @@ const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             </tr>
           </thead>
           <tbody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td className="border border-black p-2">{item.item_name}</td>
+                <td className="border border-black p-2 text-center">{item.description || item.quantity}</td>
+              </tr>
+            ))}
             <tr>
               <td className="border border-black p-2">نوع العمل</td>
               <td className="border border-black p-2 text-center">{order.work_type}</td>

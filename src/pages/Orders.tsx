@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Eye, Edit, Printer, X, ArrowLeft, AlertCircle, Loader2, Sparkles, Package, Trash2, ListChecks } from 'lucide-react';
 import { useOrders, useCustomers, useInventory, useOrderInventory, useTransactions, DbPrintOrder, DbInventory } from '@/hooks/useSupabaseData';
-import { useOrderItems } from '@/hooks/useOrderItems';
+import { useOrderItems, DbOrderItem } from '@/hooks/useOrderItems';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, workTypes } from '@/data/mockData';
 import { toast } from 'sonner';
@@ -35,6 +35,7 @@ const Orders = () => {
   const [editingOrder, setEditingOrder] = useState<DbPrintOrder | null>(null);
   const [printOrder, setPrintOrder] = useState<DbPrintOrder | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [printItems, setPrintItems] = useState<DbOrderItem[]>([]);
 
   const { orders, loading, addOrder, updateOrderStatus, updateOrder, fetchOrders, deleteMultipleOrders } = useOrders();
   const { addTransaction } = useTransactions();
@@ -43,6 +44,14 @@ const Orders = () => {
   const { addOrderInventoryItems } = useOrderInventory();
   const { hasRole, isOwner, isOwnerOrAccountant } = useAuth();
   const canViewFinancials = isOwnerOrAccountant();
+  const canCreateOrder = isOwner();
+  const canEditOrder = isOwner();
+  const canTransition = (from: OrderStatus, to: OrderStatus) => {
+    if (isOwner()) return true;
+    if (hasRole('designer')) return (from === 'new' && to === 'design') || (from === 'design' && (to === 'new' || to === 'printing'));
+    if (hasRole('printer')) return (from === 'printing' && to === 'printed') || (from === 'printed' && (to === 'printing' || to === 'waiting_outside')) || (from === 'waiting_outside' && (to === 'printed' || to === 'delivered'));
+    return false;
+  };
 
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +92,7 @@ const Orders = () => {
   // Filter customers based on search
   const filteredCustomersList = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 10);
-    return customers.filter(c => 
+    return customers.filter(c =>
       c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
       (c.phone && c.phone.includes(customerSearch))
     ).slice(0, 10);
@@ -142,9 +151,9 @@ const Orders = () => {
        return m;
     }));
   };
-  
+
   // For adding items to existing orders
-  const { addMultipleItems } = useOrderItems();
+  const { addMultipleItems, getOrderItems } = useOrderItems();
 
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
@@ -187,8 +196,8 @@ const Orders = () => {
   const getStatusCounts = () => {
     const counts: Record<string, { total: number; new: number }> = {};
     statusOptions.forEach(opt => {
-      const filtered = opt.value === 'all' 
-        ? orders 
+      const filtered = opt.value === 'all'
+        ? orders
         : orders.filter(o => o.status === opt.value);
       counts[opt.value] = {
         total: filtered.length,
@@ -233,8 +242,8 @@ const Orders = () => {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
-      order.order_number.includes(searchQuery) || 
+    const matchesSearch =
+      order.order_number.includes(searchQuery) ||
       order.customer_name.includes(searchQuery);
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -264,10 +273,10 @@ const Orders = () => {
     return flow[currentStatus];
   };
 
-  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
-    await updateOrderStatus(orderId, newStatus);
-    markAsSeen(orderId);
-    
+  const handleStatusChange = async (order: DbPrintOrder, newStatus: OrderStatus) => {
+    await updateOrderStatus(order.id, newStatus, order.status);
+    markAsSeen(order.id);
+
     if (newStatus === 'waiting_outside') {
       toast.info('تم تحويل العميل للانتظار بالخارج');
     }
@@ -285,7 +294,7 @@ const Orders = () => {
         const existingCustomer = customers.find(
           c => c.name.toLowerCase().trim() === formData.customer_name.toLowerCase().trim()
         );
-        
+
         if (existingCustomer) {
           customerId = existingCustomer.id;
         } else {
@@ -420,7 +429,7 @@ const Orders = () => {
   };
 
   const updateMaterialQuantity = (inventoryId: string, quantity: number) => {
-    setSelectedMaterials(selectedMaterials.map(m => 
+    setSelectedMaterials(selectedMaterials.map(m =>
       m.inventory_id === inventoryId ? { ...m, quantity_used: quantity } : m
     ));
   };
@@ -441,28 +450,27 @@ const Orders = () => {
     markAsSeen(order.id);
   };
 
-  const openPrintModal = (order: DbPrintOrder) => {
-    setPendingPrintOrder(order);
-    setShowPrinterPrompt(true);
+  const openPrintModal = async (order: DbPrintOrder) => {
+    try {
+      setPrintItems(await getOrderItems(order.id));
+      setPendingPrintOrder(order);
+      setShowPrinterPrompt(true);
+    } catch {
+      toast.error('Could not load order items for printing');
+    }
   };
 
   const confirmPrint = () => {
     if (!pendingPrintOrder) return;
-    
-    // Create a temporary order object with the printer name
-    const orderWithPrinter = {
-      ...pendingPrintOrder,
-      printed_by: printerName || 'غير محدد'
-    };
-    
-    setPrintOrder(orderWithPrinter);
+    setPrintOrder({ ...pendingPrintOrder, printed_by: printerName || 'غير محدد' });
     setShowPrinterPrompt(false);
-    setTimeout(() => {
-      handlePrint();
-      setPrinterName('');
-      setPendingPrintOrder(null);
-    }, 100);
+    setPrinterName('');
+    setPendingPrintOrder(null);
   };
+
+  useEffect(() => {
+    if (printOrder) handlePrint();
+  }, [printOrder, handlePrint]);
 
   const getUpdatedStatusLabel = (status: OrderStatus) => {
     const labels: Record<OrderStatus, string> = {
@@ -501,7 +509,7 @@ const Orders = () => {
       {/* Hidden Print Component */}
       <div className="hidden">
         <div ref={printRef}>
-          {printOrder && <OrderReceipt order={printOrder} />}
+          {printOrder && <OrderReceipt order={printOrder} items={printItems} />}
         </div>
       </div>
 
@@ -555,9 +563,9 @@ const Orders = () => {
           <p className="text-muted-foreground">إدارة ومتابعة أوامر الطباعة والتسليم</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {selectedIds.size > 0 && (
-            <button 
-              onClick={handleBulkDelete} 
+          {canEditOrder && selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
               className="btn-outline border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
               disabled={isSubmitting}
             >
@@ -565,14 +573,14 @@ const Orders = () => {
               حذف المختار ({selectedIds.size})
             </button>
           )}
-          <ExcelImportExport tableName="print_orders" onImportComplete={fetchOrders} />
-          <button 
+          {canCreateOrder && <ExcelImportExport tableName="print_orders" onImportComplete={fetchOrders} />}
+          {canCreateOrder && <button
             onClick={() => setShowAddModal(true)}
             className="btn-primary"
           >
             <Plus className="w-5 h-5" />
             إذن طباعة جديد
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -606,8 +614,8 @@ const Orders = () => {
                 key={option.value}
                 onClick={() => setStatusFilter(option.value)}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  statusFilter === option.value 
-                    ? 'bg-primary text-primary-foreground' 
+                  statusFilter === option.value
+                    ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
@@ -632,8 +640,8 @@ const Orders = () => {
           const isSelected = selectedIds.has(order.id);
 
           return (
-            <div 
-              key={order.id} 
+            <div
+              key={order.id}
               className={`glass-card p-6 hover:shadow-lg transition-all relative ${isNew ? 'ring-2 ring-primary bg-primary/5' : ''} ${isSelected ? 'ring-2 ring-primary bg-primary/10' : ''}`}
             >
               <div className="absolute top-4 left-4 z-10 flex items-center gap-3">
@@ -650,7 +658,7 @@ const Orders = () => {
                   <Sparkles className="w-4 h-4 text-primary-foreground" />
                 </div>
               )}
-              
+
               <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                 {/* Order Info */}
                 <div className="flex items-center gap-4 flex-1">
@@ -698,27 +706,27 @@ const Orders = () => {
                 {/* Actions */}
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Previous Status Button */}
-                  {prevStatus && (hasRole('owner') || hasRole('accountant') || hasRole('designer')) && (
-                    <button 
-                      onClick={() => handleStatusChange(order.id, prevStatus)}
+                  {prevStatus && canTransition(order.status, prevStatus) && (
+                    <button
+                      onClick={() => handleStatusChange(order, prevStatus)}
                       className="btn-outline text-sm py-2"
                     >
                       <ArrowLeft className="w-4 h-4" />
                       رجوع
                     </button>
                   )}
-                  
+
                   {/* Next Status Button */}
-                  {nextStatus && (
-                    <button 
-                      onClick={() => handleStatusChange(order.id, nextStatus)}
+                  {nextStatus && canTransition(order.status, nextStatus) && (
+                    <button
+                      onClick={() => handleStatusChange(order, nextStatus)}
                       className="btn-secondary text-sm py-2"
                     >
                       نقل إلى {getUpdatedStatusLabel(nextStatus)}
                     </button>
                   )}
-                  
-                  <button 
+
+                  <button
                     onClick={() => {
                       setShowViewModal(order);
                       markAsSeen(order.id);
@@ -728,20 +736,20 @@ const Orders = () => {
                   >
                     <Eye className="w-5 h-5" />
                   </button>
-                  <button 
+                  <button
                     onClick={() => openPrintModal(order)}
                     className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
                     title="طباعة الإذن"
                   >
                     <Printer className="w-5 h-5" />
                   </button>
-                  <button 
+                  {canEditOrder && <button
                     onClick={() => openEditModal(order)}
                     className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
                     title="تعديل"
                   >
                     <Edit className="w-5 h-5" />
-                  </button>
+                  </button>}
                 </div>
               </div>
             </div>
@@ -788,7 +796,7 @@ const Orders = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  handleStatusChange(showWaitingPopup.id, 'delivered');
+                  handleStatusChange(showWaitingPopup, 'delivered');
                   setShowWaitingPopup(null);
                 }}
                 className="btn-primary flex-1"
@@ -821,7 +829,7 @@ const Orders = () => {
           <div className="bg-card rounded-xl p-6 w-full max-w-lg animate-scale-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-foreground">تفاصيل الإذن</h2>
-              <button 
+              <button
                 onClick={() => setShowViewModal(null)}
                 className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
               >
@@ -899,7 +907,7 @@ const Orders = () => {
                   <Printer className="w-4 h-4" />
                   طباعة الإذن
                 </button>
-                <button
+                {canEditOrder && <button
                   onClick={() => {
                     openEditModal(showViewModal);
                     setShowViewModal(null);
@@ -908,7 +916,7 @@ const Orders = () => {
                 >
                   <Edit className="w-4 h-4" />
                   تعديل
-                </button>
+                </button>}
               </div>
             </div>
           </div>
@@ -916,7 +924,7 @@ const Orders = () => {
       )}
 
       {/* Add Modal POS Form */}
-      {showAddModal && (
+      {showAddModal && canCreateOrder && (
         <AddOrderPosForm onClose={() => {
           setShowAddModal(false);
           fetchOrders(); // Refresh orders after adding
@@ -929,7 +937,7 @@ const Orders = () => {
           <div className="bg-card rounded-xl p-6 w-full max-w-lg animate-scale-in my-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-foreground">تعديل الإذن - {editingOrder.order_number}</h2>
-              <button 
+              <button
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingOrder(null);

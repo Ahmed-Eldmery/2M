@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -683,6 +683,18 @@ export type Database = {
         Returns: boolean
       }
       is_owner_or_accountant: { Args: { _user_id: string }; Returns: boolean }
+      transition_print_order: {
+        Args: {
+          p_order_id: string
+          p_expected_status: Database["public"]["Enums"]["order_status"]
+          p_new_status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Database["public"]["Tables"]["print_orders"]["Row"]
+      }
+      deduct_order_inventory: {
+        Args: { p_order_id: string; p_items: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "owner" | "accountant" | "designer" | "printer" | "warehouse"

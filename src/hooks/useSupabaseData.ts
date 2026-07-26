@@ -303,7 +303,7 @@ export function useInventoryReceipts() {
     const { count } = await supabase
       .from('inventory_receipts')
       .select('*', { count: 'exact', head: true });
-    
+
     return `RCV-${year}-${String((count || 0) + 1).padStart(4, '0')}`;
   };
 
@@ -313,7 +313,7 @@ export function useInventoryReceipts() {
   ) => {
     try {
       const receiptNumber = await generateReceiptNumber();
-      
+
       // Insert receipt
       const { data: receiptData, error: receiptError } = await supabase
         .from('inventory_receipts')
@@ -370,33 +370,12 @@ export function useInventoryReceipts() {
 export function useOrderInventory() {
   const addOrderInventoryItems = async (orderId: string, items: { inventory_id: string; quantity_used: number }[]) => {
     try {
-      // Insert order inventory items
-      const itemsWithOrderId = items.map(item => ({
-        ...item,
-        order_id: orderId
-      }));
-
-      const { error } = await supabase
-        .from('order_inventory_items')
-        .insert(itemsWithOrderId);
+      const { error } = await supabase.rpc('deduct_order_inventory', {
+        p_order_id: orderId,
+        p_items: items,
+      });
 
       if (error) throw error;
-
-      // Deduct from inventory
-      for (const item of items) {
-        const { data: invItem } = await supabase
-          .from('inventory')
-          .select('quantity')
-          .eq('id', item.inventory_id)
-          .single();
-
-        if (invItem) {
-          await supabase
-            .from('inventory')
-            .update({ quantity: Math.max(0, invItem.quantity - item.quantity_used) })
-            .eq('id', item.inventory_id);
-        }
-      }
 
       toast.success('تم خصم الخامات من المخزن');
     } catch (error: any) {
@@ -580,7 +559,7 @@ export function useOrders() {
     const { count } = await supabase
       .from('print_orders')
       .select('*', { count: 'exact', head: true });
-    
+
     return `ORD-${year}-${String((count || 0) + 1).padStart(4, '0')}`;
   };
 
@@ -603,15 +582,13 @@ export function useOrders() {
     }
   };
 
-  const updateOrderStatus = async (id: string, status: DbPrintOrder['status']) => {
+  const updateOrderStatus = async (id: string, status: DbPrintOrder['status'], expectedStatus: DbPrintOrder['status']) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase
-        .from('print_orders')
-        .update({ status, status_updated_by_email: user?.email })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await supabase.rpc('transition_print_order', {
+        p_order_id: id,
+        p_expected_status: expectedStatus,
+        p_new_status: status,
+      });
 
       if (error) throw error;
       toast.success('تم تحديث حالة الطلب');
@@ -982,7 +959,7 @@ export function useNotifications() {
           if (notification.user_id === user.id || notification.user_id === null) {
             setNotifications(prev => [notification, ...prev]);
             setUnreadCount(prev => prev + 1);
-            
+
             // Show toast for waiting_outside notifications
             if (notification.type === 'waiting_outside') {
               toast.info(notification.message, {
@@ -1148,9 +1125,9 @@ export function useBackups() {
     try {
       const { data, error } = await supabase
         .from('database_backups' as any)
-        .insert([{ 
-          backup_name: name, 
-          tables_included: tables, 
+        .insert([{
+          backup_name: name,
+          tables_included: tables,
           notes,
           created_by: user?.id,
           backup_type: 'manual'

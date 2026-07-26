@@ -45,6 +45,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+type AppRole = 'owner' | 'accountant' | 'designer' | 'printer' | 'warehouse';
+
+const RoleRoute = ({ allowed, children }: { allowed: AppRole[]; children: React.ReactNode }) => {
+  const { roles, loading } = useAuth();
+  if (loading) return <Loader2 className="w-8 h-8 animate-spin text-primary" />;
+  return roles.some(role => allowed.includes(role)) ? <>{children}</> : <Navigate to="/" replace />;
+};
+
 const AppRoutes = () => {
   const { ownerExists, loading, checkOwnerExists } = useAuth();
 
@@ -61,15 +69,15 @@ const AppRoutes = () => {
   if (ownerExists === false) {
     return (
       <Routes>
-        <Route 
-          path="*" 
+        <Route
+          path="*"
           element={
-            <OwnerSetup 
+            <OwnerSetup
               onComplete={() => {
                 checkOwnerExists();
-              }} 
+              }}
             />
-          } 
+          }
         />
       </Routes>
     );
@@ -85,20 +93,20 @@ const AppRoutes = () => {
             <MainLayout>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/inventory/receipts" element={<InventoryReceipts />} />
+                <Route path="/inventory" element={<RoleRoute allowed={['owner', 'warehouse']}><Inventory /></RoleRoute>} />
+                <Route path="/inventory/receipts" element={<RoleRoute allowed={['owner', 'warehouse']}><InventoryReceipts /></RoleRoute>} />
                 <Route path="/customers" element={<Customers />} />
                 <Route path="/customers/:customerId/orders" element={<CustomerOrders />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/calendar" element={<OrdersCalendar />} />
-                <Route path="/accounting" element={<Accounting />} />
-                <Route path="/employees" element={<Employees />} />
-                <Route path="/attendance" element={<Attendance />} />
-                <Route path="/backups" element={<Backups />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/tasks" element={<Tasks />} />
-                <Route path="/suppliers" element={<Suppliers />} />
-                <Route path="/settings" element={<Settings />} />
+                <Route path="/accounting" element={<RoleRoute allowed={['owner', 'accountant']}><Accounting /></RoleRoute>} />
+                <Route path="/employees" element={<RoleRoute allowed={['owner', 'accountant']}><Employees /></RoleRoute>} />
+                <Route path="/attendance" element={<RoleRoute allowed={['owner', 'accountant']}><Attendance /></RoleRoute>} />
+                <Route path="/backups" element={<RoleRoute allowed={['owner']}><Backups /></RoleRoute>} />
+                <Route path="/reports" element={<RoleRoute allowed={['owner', 'accountant']}><Reports /></RoleRoute>} />
+                <Route path="/tasks" element={<RoleRoute allowed={['owner', 'accountant']}><Tasks /></RoleRoute>} />
+                <Route path="/suppliers" element={<RoleRoute allowed={['owner']}><Suppliers /></RoleRoute>} />
+                <Route path="/settings" element={<RoleRoute allowed={['owner']}><Settings /></RoleRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </MainLayout>

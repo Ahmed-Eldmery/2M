@@ -68,6 +68,16 @@ export function useOrderItems(orderId?: string) {
     };
   }, [fetchItems, orderId]);
 
+  const getOrderItems = async (orderIdParam: string) => {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', orderIdParam)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  };
+
   const addItem = async (item: Omit<DbOrderItem, 'id' | 'created_at' | 'is_delivered' | 'delivered_at'>) => {
     try {
       const { data, error } = await supabase
@@ -113,7 +123,7 @@ export function useOrderItems(orderId?: string) {
     try {
       const { data, error } = await supabase
         .from('order_items')
-        .update({ 
+        .update({
           is_delivered: isDelivered,
           delivered_at: isDelivered ? new Date().toISOString() : null
         })
@@ -145,5 +155,5 @@ export function useOrderItems(orderId?: string) {
     }
   };
 
-  return { items, loading, fetchItems, addItem, addMultipleItems, toggleDelivered, deleteItem };
+  return { items, loading, fetchItems, getOrderItems, addItem, addMultipleItems, toggleDelivered, deleteItem };
 }
